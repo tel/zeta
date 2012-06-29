@@ -3,9 +3,16 @@
 -compile([export_all]).
 -author('Joseph Abrahamson <me@jspha.com>').
 
--export([encode/1, decode/1]).
+-export([message/1, encode/1, decode/1]).
 
 -include("include/zeta.hrl").
+
+-spec
+message(zmsg()) -> binary().
+message(Msg) ->
+    BMsg = encode(Msg),
+    Size = byte_size(BMsg),
+    <<Size:32/integer-big, BMsg/binary>>.
 
 -spec
 encode(zstate() | zevent() | zquery() | zmsg()) -> binary().
