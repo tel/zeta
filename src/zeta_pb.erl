@@ -3,7 +3,7 @@
 -compile([export_all]).
 -author('Joseph Abrahamson <me@jspha.com>').
 
--export([message/1, encode/1, decode/1]).
+-export([message/1, pop/1, stream/1, encode/1, decode/1]).
 
 -include("include/zeta.hrl").
 
@@ -13,6 +13,31 @@ message(Msg) ->
     BMsg = encode(Msg),
     Size = byte_size(BMsg),
     <<Size:32/integer-big, BMsg/binary>>.
+
+-spec
+pop(binary()) -> {zmsg(), binary()}.
+pop(<<Length:32/integer-big, Rest/binary>>) ->
+    case Rest of
+	<<Msg:Length/binary, Leftover/binary>> ->
+	    {decode(Msg), Leftover};
+	_ -> 
+	    lager:warning("Failed to parse a zeta:zmsg()"),
+	    {none, Rest}
+    end;
+pop(Else) -> {none, Else}.
+
+-spec
+stream(binary()) -> [zmsg()].
+stream(Bin) ->
+    stream(Bin, []).
+
+stream(<<>>, Acc) -> lists:reverse(Acc);
+stream(Bin, Acc) ->
+    case pop(Bin) of
+	{none, _} -> lists:reverse(Acc);
+        {Msg, Rest} -> stream(Rest, [Msg | Acc])
+    end.
+    
 
 -spec
 encode(zstate() | zevent() | zquery() | zmsg()) -> binary().
@@ -92,7 +117,6 @@ decode(Bin, Msg = #zeta_msg{zstates = States, zevents = Events}) ->
 		{{?MSG_ERROR, Value}, Rest} ->
 		    decode(Rest, Msg#zeta_msg{error = Value});
 		{{?MSG_ZSTATE, Value}, Rest} ->
-		    lager:info("~w", [Value]),
 		    case decode(Value, #zeta_state{}) of
 			{error, R, _} -> {error, R, state_failed};
 			State -> 
