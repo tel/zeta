@@ -11,24 +11,26 @@
 	  ttl :: undefined | float(),		% 8  float
 	  metric_f :: undefined | float()	% 15 float
 	 }).
+
 -define(STATE_TIME, 1).
--define(STATE_TIME_T, int64).
 -define(STATE_STATE, 2).
--define(STATE_STATE_T, string).
 -define(STATE_SERVICE, 3).
--define(STATE_SERVICE_T, string).
 -define(STATE_HOST, 4).
--define(STATE_HOST_T, string).
 -define(STATE_DESCRIPTION, 5).
--define(STATE_DESCRIPTION_T, string).
 -define(STATE_ONCE, 6).
--define(STATE_ONCE_T, bool).
 -define(STATE_TAG, 7).
--define(STATE_TAG_T, string).
 -define(STATE_TTL, 8).
--define(STATE_TTL_T, float).
 -define(STATE_METRICF, 15).	
--define(STATE_METRICF_T, float).	
+
+state_t(?STATE_TIME) -> int64;
+state_t(?STATE_STATE) -> string;
+state_t(?STATE_SERVICE) -> string;
+state_t(?STATE_HOST) -> string;
+state_t(?STATE_DESCRIPTION) -> string;
+state_t(?STATE_ONCE) -> bool;
+state_t(?STATE_TAG) -> string;
+state_t(?STATE_TTL) -> float;
+state_t(?STATE_METRICF) -> float.
 
 -record(zeta_event,
 	{
@@ -41,31 +43,34 @@
 	  ttl :: undefined | float(),		% 8  float
 	  metric_f :: undefined | float() 	% 15  float
 	 }).
+
 -define(EVENT_TIME, 1).
--define(EVENT_TIME_T, int64).
 -define(EVENT_STATE, 2).
--define(EVENT_STATE_T, string).
 -define(EVENT_SERVICE, 3).
--define(EVENT_SERVICE_T, string).
 -define(EVENT_HOST, 4).
--define(EVENT_HOST_T, string).
 -define(EVENT_DESCRIPTION, 5).
--define(EVENT_DESCRIPTION_T, string).
 -define(EVENT_ONCE, 6).
--define(EVENT_ONCE_T, bool).
 -define(EVENT_TAG, 7).
--define(EVENT_TAG_T, string).
 -define(EVENT_TTL, 8).
--define(EVENT_TTL_T, float).
--define(EVENT_METRICF, 15).	
--define(EVENT_METRICF_T, float).
+-define(EVENT_METRICF, 15).
+
+event_t(?EVENT_TIME) -> int64;
+event_t(?EVENT_STATE) -> string;
+event_t(?EVENT_SERVICE) -> string;
+event_t(?EVENT_HOST) -> string;
+event_t(?EVENT_DESCRIPTION) -> string;
+event_t(?EVENT_ONCE) -> string;
+event_t(?EVENT_TAG) -> string;
+event_t(?EVENT_TTL) -> float;
+event_t(?EVENT_METRICF) -> float.
+
 
 -record(zeta_query,
 	{
 	  string :: undefined | string()	% 1 string
 	 }).
 -define(QUERY_STRING, 1).	
--define(QUERY_STRING_T, string).
+query_t(?QUERY_STRING) -> string.
 
 -record(zeta_msg,
 	{
@@ -77,15 +82,16 @@
 	 }).
 
 -define(MSG_OK, 2).
--define(MSG_OK_T, bool).
 -define(MSG_ERROR, 3).
--define(MSG_ERROR_T, string).
 -define(MSG_ZSTATE, 4).
--define(MSG_ZSTATE_T, bytes).
 -define(MSG_ZQUERY, 5).
--define(MSG_ZQUERY_T, bytes).
 -define(MSG_ZEVENT, 6).
--define(MSG_ZEVENT_T, bytes).
+
+msg_t(?MSG_OK) -> bool;
+msg_t(?MSG_ERROR) -> string;
+msg_t(?MSG_ZSTATE) -> bytes;
+msg_t(?MSG_ZQUERY) -> bytes;
+msg_t(?MSG_ZEVENT) -> bytes.
 
 -type zstate() :: #zeta_state{}.
 -type zevent() :: #zeta_event{}.
