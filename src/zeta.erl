@@ -85,8 +85,9 @@ sv(Loc, Metric, State) -> sv(Loc, Metric, State, []).
 sv(Loc, Metric, State, Opts) ->
     E = ev(Loc, Metric, State, Opts),
     M = #zeta_msg{zevents = [E]},
-    Data = zeta_pb:message(M),
-    gen_server:call(zeta_client, {events, Data}).
+    Data = zeta_pb:encode(M),
+    Length = byte_size(Data),
+    gen_server:call(zeta_client, {events, <<Length:32/integer-big, Data/binary>>}).
 
 svh(Service, Metric) -> svh(Service, Metric, undefined).
 svh(Service, Metric, State) -> svh(Service, Metric, State, []).
