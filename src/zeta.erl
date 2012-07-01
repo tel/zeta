@@ -5,6 +5,7 @@
 
 -export([ev/2, ev/3, ev/4, evh/2, evh/3, evh/4]).
 -export([sv/2, sv/3, sv/4, svh/2, svh/3, svh/4]).
+-export([cv/2, cv/3, cv/4, cvh/2, cvh/3, cvh/4]).
 
 -behaviour(application).
 -export([start/0, start/2, stop/1]).
@@ -87,11 +88,24 @@ sv(Loc, Metric, State) -> sv(Loc, Metric, State, []).
 sv(Loc, Metric, State, Opts) ->
     E = ev(Loc, Metric, State, Opts),
     M = #zeta_msg{zevents = [E]},
-    zeta_pb:message(M).
+    Data = zeta_pb:message(M),
+    gen_server:call(zeta_client, {events, Data}).
 
 svh(Service, Metric) -> svh(Service, Metric, undefined).
 svh(Service, Metric, State) -> svh(Service, Metric, State, []).
 svh(Service, Metric, State, Opts) -> sv({node(), Service}, Metric, State, Opts).
+
+cv(Loc, Metric) -> cv(Loc, Metric, undefined).
+cv(Loc, Metric, State) -> cv(Loc, Metric, State, []).
+cv(Loc, Metric, State, Opts) ->
+    E = ev(Loc, Metric, State, Opts),
+    M = #zeta_msg{zevents = [E]},
+    Data = zeta_pb:encode(M),
+    gen_server:cast(zeta_client, {events, Data}).
+
+cvh(Service, Metric) -> cvh(Service, Metric, undefined).
+cvh(Service, Metric, State) -> cvh(Service, Metric, State, []).
+cvh(Service, Metric, State, Opts) -> cv({node(), Service}, Metric, State, Opts).
 
 
 lookup(K, List) when is_atom(K) ->
@@ -124,13 +138,10 @@ stop(_State) ->
 %% Supervisor callbacks
 
 init(_Args) ->
-    Frontend = {zeta_frontend, 
-		{zeta_frontend, start_link, []},
-		permanent, brutal_kill, worker, [zeta_frontend]},
-    Corral = {zeta_corral,
-	      {zeta_corral, start_link, []},
-	      permanent, 5000, supervisor, [zeta_corral]},
-    {ok, {{one_for_one, 5, 10}, [Frontend, Corral]}}.
+    Backend = {zeta_client, 
+	       {zeta_client, start_link, []},
+	       permanent, brutal_kill, worker, [zeta_client]},
+    {ok, {{one_for_one, 5, 10}, [Backend]}}.
 
 
 %% ---------
