@@ -22,6 +22,7 @@
 
 -type service() :: atom_or_string() | list(atom_or_string()).
 -type loc_spec() :: atom_or_string() | {atom_or_string(), service()}.
+-type event_opt() :: {t | time | desc | description | tag | tags | ttl, _}.
 
 -spec 
 %% @doc Builds an event, trying to be as "DWIM" as possible.
@@ -49,6 +50,8 @@ stringify(Thing) when is_tuple(Thing) ->
 ev(Loc, Metric, State) ->
     ev(Loc, Metric, State, []).
 
+-spec
+ev(loc_spec() | service(), number(), atom_or_string(), [event_opt()]) -> zevent().
 ev(Loc, Metric, State, []) when is_atom(State) ->
     ev(Loc, Metric, atom_to_list(State), []);
 ev(Loc, Metric, State, []) when is_list(State) ->
