@@ -34,15 +34,11 @@ ev({Host, Service}, Metric) when is_list(Host) ->
 ev({Host, Service}, Metric) when is_atom(Host) ->
     E = ev(Service, Metric),
     E#zeta_event{host = atom_to_list(Host)};
-ev(Service, Metric) when is_atom(Service) ->
-    ev(atom_to_list(Service), Metric);
-ev(Services = [Service | _], Metric) when is_atom(Service) ->
-    ev(lists:map(fun stringify/1, Services), Metric);
-ev(Services = [Service | _], Metric) when is_list(Service) ->
-    ev(string:join(Services, " "), Metric);
-ev(Service = [Char | _], Metric) when is_integer(Char), is_number(Metric) ->
-    #zeta_event{service = Service, metric_f = Metric}.
+ev(Service, Metric) when is_number(Metric) ->
+    #zeta_event{service = stringify(Service), metric_f = Metric}.
 
+stringify(Thing = [X | _]) when is_integer(X) -> Thing;
+stringify(Things) when is_list(Things) -> lists:map(fun stringify/1, Things);
 stringify(Thing) when is_atom(Thing) -> atom_to_list(Thing);
 stringify(Thing) when is_number(Thing) -> integer_to_list(round(Thing));
 stringify(Thing) when is_tuple(Thing) -> 
