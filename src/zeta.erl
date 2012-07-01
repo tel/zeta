@@ -18,6 +18,14 @@
 %% ----------
 %% Public API
 
+-type atom_or_string() :: atom() | nonempty_string().
+
+-type service() :: atom_or_string() | list(atom_or_string()).
+-type loc_spec() :: atom_or_string() | {atom_or_string(), service()}.
+
+-spec 
+%% @doc Builds an event, trying to be as "DWIM" as possible.
+ev(loc_spec() | service(), number()) -> zevent().
 ev({Host, Service}, Metric) when is_list(Host) ->
     E = ev(Service, Metric),
     E#zeta_event{host = Host};
@@ -27,11 +35,16 @@ ev({Host, Service}, Metric) when is_atom(Host) ->
 ev(Service, Metric) when is_atom(Service) ->
     ev(atom_to_list(Service), Metric);
 ev(Services = [Service | _], Metric) when is_atom(Service) ->
-    ev(lists:map(fun atom_to_list/1, Services), Metric);
+    ev(lists:map(fun stringify/1, Services), Metric);
 ev(Services = [Service | _], Metric) when is_list(Service) ->
     ev(string:join(Services, " "), Metric);
 ev(Service = [Char | _], Metric) when is_integer(Char), is_number(Metric) ->
     #zeta_event{service = Service, metric_f = Metric}.
+
+stringify(Thing) when is_atom(Thing) -> atom_to_list(Thing);
+stringify(Thing) when is_number(Thing) -> integer_to_list(round(Thing));
+stringify(Thing) when is_tuple(Thing) -> 
+    string:join(lists:map(fun stringify/1, tuple_to_list(Thing)), " ").
 
 ev(Loc, Metric, State) ->
     ev(Loc, Metric, State, []).
@@ -65,11 +78,13 @@ evh(Service, Metric, State) ->
 evh(Service, Metric, State, Opts) ->
     ev({node(), Service}, Metric, State, Opts).
 
+%% @doc Sends an event, trying to be as "DWIM" as possible.
 sv(Loc, Metric) -> sv(Loc, Metric, undefined).
 sv(Loc, Metric, State) -> sv(Loc, Metric, State, []).
 sv(Loc, Metric, State, Opts) ->
     E = ev(Loc, Metric, State, Opts),
-    zeta_pb:message(E).
+    M = #zeta_msg{zevents = [E]},
+    zeta_pb:message(M).
 
 svh(Service, Metric) -> svh(Service, Metric, undefined).
 svh(Service, Metric, State) -> svh(Service, Metric, State, []).
