@@ -63,6 +63,7 @@ ev(Loc, Metric, State, Opts) ->
 		 description = Description, tags = process_tags(Tags, []),
 		 ttl = TTL}.
 
+process_tags(undefined, _) -> [];
 process_tags([], Acc) -> Acc;
 process_tags([Tag | Tags], Acc) when is_atom(Tag) ->
     process_tags(Tags, [atom_to_list(Tag) | Acc]);
