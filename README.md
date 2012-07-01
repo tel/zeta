@@ -33,6 +33,8 @@ ok
 
 - Decide how to handle TCP/UDP methods.
 - Make UDP automatically upgrade to TCP if the packet is too large
+- Allow for multiple client endpoints
+- Make the interface a bit nicer?
 
 # Why "Zeta" #
 
