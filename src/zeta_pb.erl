@@ -6,6 +6,7 @@
 -export([message/1, pop/1, stream/1, encode/1, decode/1]).
 
 -include("include/zeta.hrl").
+-include("include/zeta_extra.hrl").
 
 -spec
 message(zmsg()) -> binary().
