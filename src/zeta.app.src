@@ -2,7 +2,7 @@
 {application, zeta,
  [
   {description, "Riemann client"},
-  {vsn, "0.0.1"},
+  {vsn, git},
   {modules, []},
 
   {registered, [zeta]},
