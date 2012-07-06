@@ -31,6 +31,8 @@ ok
 
 # To do #
 
+- *Fix lifecycles*. Right now, a failing Riemann server will quickly kill the
+  zeta app and any release running it. This is dumb.
 - Decide how to handle TCP/UDP methods.
 - Make UDP automatically upgrade to TCP if the packet is too large
 - Allow for multiple client endpoints
