@@ -99,6 +99,13 @@ encode(#zeta_query{string = String}) ->
 decode(Bin) ->
     decode(Bin, #zeta_msg{}).
 
+decode(<<>>, Result = #zeta_state{tags = Tags}) -> 
+    Result#zeta_state{tags = lists:reverse(Tags)};
+decode(<<>>, Result = #zeta_event{tags = Tags}) -> 
+    Result#zeta_event{tags = lists:reverse(Tags)};
+decode(<<>>, Result = #zeta_msg{zstates = States, zevents = Events}) -> 
+    Result#zeta_msg{zstates = lists:reverse(States),
+		    zevents = lists:reverse(Events)};
 decode(<<>>, Result) -> Result;
 decode(Bin, Msg = #zeta_msg{zstates = States, zevents = Events}) ->
     try protobuffs:read_field_num_and_wire_type(Bin) of
@@ -125,7 +132,7 @@ decode(Bin, Msg = #zeta_msg{zstates = States, zevents = Events}) ->
 		{{?MSG_ZQUERY, Value}, Rest} ->
 		    case decode(Value, #zeta_query{}) of
 			{error, R, _} -> {error, R, query_failed};
-			{ok, Query} ->
+			Query ->
 			    decode(Rest, Msg#zeta_msg{zquery = Query})
 		    end
 	    catch
@@ -169,7 +176,7 @@ decode(Bin, ZState = #zeta_state{tags = Tags}) ->
 decode(Bin, ZEvent = #zeta_event{tags = Tags}) ->
     try protobuffs:read_field_num_and_wire_type(Bin) of
         {{Slot, _}, _} -> 
-	    try protobuffs:decode(Bin, state_t(Slot)) of
+	    try protobuffs:decode(Bin, event_t(Slot)) of
 		{{?EVENT_TIME, Time}, Rest} ->
 		    decode(Rest, ZEvent#zeta_event{time = Time});
 		{{?EVENT_STATE, State}, Rest} ->
@@ -195,7 +202,7 @@ decode(Bin, ZEvent = #zeta_event{tags = Tags}) ->
 decode(Bin, ZQuery = #zeta_query{}) ->
     try protobuffs:read_field_num_and_wire_type(Bin) of
         {{Slot, _}, _} -> 
-	    try protobuffs:decode(Bin, state_t(Slot)) of
+	    try protobuffs:decode(Bin, query_t(Slot)) of
 		{{?QUERY_STRING, String}, Rest} ->
 		    decode(Rest, ZQuery#zeta_query{string = String})
 	    catch
