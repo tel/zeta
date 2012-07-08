@@ -58,8 +58,8 @@ zeta_msg() ->
 
 prop_encdec_msg() ->
     ?FORALL(Msg, zeta_msg(), 
-	    equals(zeta_pb:decode(zeta_pb:encode(Msg), #zeta_msg{}),
-		   Msg)).
+	    equals(zeta_pb:decode(zeta_pb:encode(Msg)),
+		     Msg)).
 
 proper_test_() ->
     [fun () -> [] = proper:module(?MODULE, [verbose, {numtests, 100}]) end].
