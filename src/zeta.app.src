@@ -9,12 +9,11 @@
   {applications, [
                   kernel,
                   stdlib,
-		  lager,
-		  protobuffs
+		  lager
                  ]},
 
   {mod, {zeta, []}},
   {env, [
-	 {client, {{127,0,0,1}, 5555}}
+	 {clients, [{default, {{127,0,0,1}, 5555, {keepalive, 5000}}}]}
 	]}
  ]}.

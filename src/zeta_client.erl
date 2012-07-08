@@ -4,7 +4,7 @@
 
 -include("include/zeta.hrl").
 
--export([start/0, start_link/0]).
+-export([start/2, start_link/2]).
 
 -behaviour(gen_server).
 -define(SERVER, ?MODULE).
@@ -17,18 +17,17 @@
 %% -------------
 %% Lifecycle API
 
-start() ->
-    gen_server:start({local, ?SERVER}, ?MODULE, [], []).
+start(Host, Port) ->
+    gen_server:start({local, ?SERVER}, ?MODULE, [Host, Port], []).
 
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Host, Port) ->
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [Host, Port], []).
 
 
 %% -----------------------
 %% Gen server callback API
 
-init(_Args) ->
-    {ok, {Host, Port}} = application:get_env(client),
+init([Host, Port]) ->
     %% Open UDP on a random port
     {ok, UDPSock} = gen_udp:open(0, [binary, {active,false}]),
     %% Try to make a TCP connection

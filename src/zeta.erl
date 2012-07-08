@@ -1,13 +1,17 @@
 %% @doc Zeta: an Erlang client for Riemann
 
 -module(zeta).
+-compile([{parse_transform, do}]).
 -author('Joseph Abrahamson <me@jspha.com>').
 
 -export([ev/2, ev/3, ev/4, evh/2, evh/3, evh/4]).
 -export([sv/2, sv/3, sv/4, svh/2, svh/3, svh/4]).
 -export([cv/2, cv/3, cv/4, cvh/2, cvh/3, cvh/4]).
 
+-export([all_client_configs/0, client_config/1]).
+
 -behaviour(application).
+-define(APP, ?MODULE).
 -export([start/0, start/2, stop/1]).
 
 -behaviour(supervisor).
@@ -87,7 +91,9 @@ sv(Loc, Metric, State, Opts) ->
     M = #zeta_msg{zevents = [E]},
     Data = zeta_pb:encode(M),
     Length = byte_size(Data),
-    gen_server:call(zeta_client, {events, <<Length:32/integer-big, Data/binary>>}).
+    do([error_m || 
+	   Client <- zeta_corral:client(),
+	   gen_server:call(Client, {events, <<Length:32/integer-big, Data/binary>>})]).
 
 svh(Service, Metric) -> svh(Service, Metric, undefined).
 svh(Service, Metric, State) -> svh(Service, Metric, State, []).
@@ -99,7 +105,9 @@ cv(Loc, Metric, State, Opts) ->
     E = ev(Loc, Metric, State, Opts),
     M = #zeta_msg{zevents = [E]},
     Data = zeta_pb:encode(M),
-    gen_server:cast(zeta_client, {events, Data}).
+    do([error_m || 
+	   Client <- zeta_corral:client(),
+	   gen_server:cast(Client, {events, Data})]).
 
 cvh(Service, Metric) -> cvh(Service, Metric, undefined).
 cvh(Service, Metric, State) -> cvh(Service, Metric, State, []).
@@ -123,7 +131,8 @@ lookup([K | Ks], List) ->
 
 start() ->
     _ = lists:map(fun(A) -> ok = estart(A) end,
-		  [compiler, syntax_tools, lager]).
+		  [compiler, syntax_tools, lager]),
+    application:start(zeta).
 
 start(_StartType, _Args) ->
     supervisor:start_link({local, ?SUP}, ?MODULE, []).
@@ -136,14 +145,35 @@ stop(_State) ->
 %% Supervisor callbacks
 
 init(_Args) ->
-    Backend = {zeta_client, 
+    _Backend = {zeta_client, 
 	       {zeta_client, start_link, []},
 	       permanent, brutal_kill, worker, [zeta_client]},
-    {ok, {{one_for_one, 5, 10}, [Backend]}}.
+    Corral = {zeta_corral,
+	      {zeta_corral, start_link, []},
+	      permanent, 5000, supervisor, [zeta_corral]},
+    {ok, {{one_for_one, 5, 10}, [Corral]}}.
 
 
 %% ---------
 %% Utilities
+
+all_client_configs() ->
+    case application:get_env(?APP, clients) of
+	{ok, Confs} -> {ok, Confs};
+	_ -> {ok, []}
+    end.
+
+-spec 
+client_config(Client :: atom()) -> 
+    maybe:t({inet:address(), inet:portnumber(), Restart :: term()}).
+client_config(Client) ->
+    case all_client_configs() of
+	{ok, Confs} ->
+	    case lists:keyfind(Client, 1, Confs) of
+		{Client, Conf} -> maybe_m:just(Conf);
+		_Else -> maybe_m:nothing()
+	    end
+    end.
 
 estart(App) ->
     case application:start(App) of
@@ -151,3 +181,4 @@ estart(App) ->
 	ok -> ok;
 	Else -> Else
     end.
+
