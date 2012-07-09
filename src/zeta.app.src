@@ -8,8 +8,7 @@
   {registered, [zeta]},
   {applications, [
                   kernel,
-                  stdlib,
-		  lager
+                  stdlib
                  ]},
 
   {mod, {zeta, []}},
