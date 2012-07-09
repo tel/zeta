@@ -28,6 +28,9 @@ ft:
 fast:
 	@$(REBAR) skip_deps=true compile
 
+run:
+	@$(ERL) -pa $(PWD)/../*/ebin
+
 dialyzer: all
 	dialyzer \
 	ebin --no_check_plt \
