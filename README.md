@@ -8,7 +8,7 @@ By default Zeta is configured to sent to a Riemann server at
 `127.0.0.1:5555`, so fix that in your global configuration
 
 ```erlang
-{zeta, {client, {Address, Port}}}
+{zeta, {clients, [{default, {{127,0,0,1}, 5555, undefined}}]}}
 ```
 
 then include and start the Zeta application
@@ -29,10 +29,11 @@ ok
 ok
 ```
 
+Feel free to instrument your code even if the app isn't running. The
+messages will just be ignored.
+
 # To do #
 
-- *Fix lifecycles*. Right now, a failing Riemann server will quickly kill the
-  zeta app and any release running it. This is dumb.
 - Decide how to handle TCP/UDP methods.
 - Make UDP automatically upgrade to TCP if the packet is too large
 - Allow for multiple client endpoints
