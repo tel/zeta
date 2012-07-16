@@ -119,28 +119,28 @@ decode(Bin, Msg = #zeta_msg{zstates = States, zevents = Events}) ->
 		    decode(Rest, Msg#zeta_msg{error = Value});
 		{{?MSG_ZSTATE, Value}, Rest} ->
 		    case decode(Value, #zeta_state{}) of
-			{error, R, _} -> {error, R, state_failed};
+			{error, R, _} -> {error, {state_failed, R}};
 			State -> 
                             decode(Rest, Msg#zeta_msg{zstates = [State | States]})
 		    end;
 		{{?MSG_ZEVENT, Value}, Rest} ->
 		    case decode(Value, #zeta_event{}) of
-			{error, R, _} -> {error, R, event_failed};
+			{error, R, _} -> {error, {event_failed, R}};
 			Event ->
 			    decode(Rest, Msg#zeta_msg{zevents = [Event | Events]})
 		    end;
 		{{?MSG_ZQUERY, Value}, Rest} ->
 		    case decode(Value, #zeta_query{}) of
-			{error, R, _} -> {error, R, query_failed};
+			{error, R, _} -> {error, {query_failed, R}};
 			Query ->
 			    decode(Rest, Msg#zeta_msg{zquery = Query})
 		    end
 	    catch
-		error:function_clause -> {error, noparse, zmsg};
+		error:function_clause -> {error, {noparse, zmsg}};
 				   E:V -> {E, V}
 	    end
     catch
-	error:function_clause -> {error, noparse, field}
+	error:function_clause -> {error, {noparse, field, zmsg}}
     end;
 decode(Bin, ZState = #zeta_state{tags = Tags}) ->
     try protobuffs:read_field_num_and_wire_type(Bin) of
@@ -168,10 +168,10 @@ decode(Bin, ZState = #zeta_state{tags = Tags}) ->
 		{{?STATE_METRICF, MetricF}, Rest} ->
 		    decode(Rest, ZState#zeta_state{metric_f = MetricF})
 	    catch
-		error:function_clause -> {error, noparse, zstate}
+		error:function_clause -> {error, {noparse, zstate}}
 	    end
     catch
-	error:function_clause -> {error, noparse, field}
+	error:function_clause -> {error, {noparse, field, zstate}}
     end;
 decode(Bin, ZEvent = #zeta_event{tags = Tags}) ->
     try protobuffs:read_field_num_and_wire_type(Bin) of
@@ -194,10 +194,10 @@ decode(Bin, ZEvent = #zeta_event{tags = Tags}) ->
 		{{?EVENT_METRICF, MetricF}, Rest} ->
 		    decode(Rest, ZEvent#zeta_event{metric_f = MetricF})
 	    catch
-		error:function_clause -> {error, noparse, zevent}
+		error:function_clause -> {error, {noparse, zevent}}
 	    end
     catch
-	error:function_clause -> {error, noparse, field}
+	error:function_clause -> {error, {noparse, field, zevent}}
     end;
 decode(Bin, ZQuery = #zeta_query{}) ->
     try protobuffs:read_field_num_and_wire_type(Bin) of
@@ -206,10 +206,10 @@ decode(Bin, ZQuery = #zeta_query{}) ->
 		{{?QUERY_STRING, String}, Rest} ->
 		    decode(Rest, ZQuery#zeta_query{string = String})
 	    catch
-		error:function_clause -> {error, noparse, zquery}
+		error:function_clause -> {error, {noparse, zquery}}
 	    end
     catch
-	error:function_clause -> {error, noparse, field}
+	error:function_clause -> {error, {noparse, field, zquery}}
     end.
 
 %% Utilities
