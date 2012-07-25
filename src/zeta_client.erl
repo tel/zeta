@@ -43,7 +43,7 @@ terminate(_Reason, #st{udp = UDPSock, tcp = TCPSock}) ->
     end,
     case TCPSock of
 	undefined -> ok;
-	TSock -> gen_udp:close(TSock)
+	TSock -> gen_tcp:close(TSock)
     end.
     
 handle_call({events, Msg}, _From, St = #st{tcp = TCP}) ->
