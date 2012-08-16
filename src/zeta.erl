@@ -41,12 +41,20 @@ ev({Host, Service}, Metric) when is_atom(Host) ->
 ev(Service, Metric) when is_number(Metric) ->
     #zeta_event{service = stringify(Service), metric_f = Metric}.
 
-stringify(Thing = [X | _]) when is_integer(X) -> Thing;
-stringify(Things) when is_list(Things) -> lists:map(fun stringify/1, Things);
-stringify(Thing) when is_atom(Thing) -> atom_to_list(Thing);
-stringify(Thing) when is_number(Thing) -> integer_to_list(round(Thing));
-stringify(Thing) when is_tuple(Thing) -> 
-    string:join(lists:map(fun stringify/1, tuple_to_list(Thing)), " ").
+%% @doc Converts a list or tree of atoms/binaries/strings to a series
+%% of "words". See the tests at the end of this source file for more
+%% details.
+stringify(It) -> string:join(stringify_in(It), " ").
+
+%% @doc Takes in whatever `stringify/1' hands it and returns a list of
+%% string tokens (a list of lists).
+stringify_in(B) when is_binary(B) -> [binary_to_list(B)];
+stringify_in(A) when is_atom(A) -> [atom_to_list(A)];
+stringify_in(L) when is_list(L) ->
+    case io_lib:printable_unicode_list(L) of
+        true -> [L];
+        false -> lists:flatmap(fun stringify_in/1, L)
+    end.
 
 ev(Loc, Metric, State) ->
     ev(Loc, Metric, State, []).
@@ -182,3 +190,78 @@ estart(App) ->
 	Else -> Else
     end.
 
+
+%% -----------------------
+%% Internal function tests
+
+-ifdef(TEST).
+
+-include_lib("eunit/include/eunit.hrl").
+
+stringify_test_() ->
+    [
+     {"inputs: just atoms", 
+      [
+       {"single",
+        [
+         ?_assertEqual("foo", stringify(foo)),
+         ?_assertEqual("foo", stringify([foo]))
+        ]},
+       {"multiple",
+        [
+         ?_assertEqual("foo bar", stringify([foo, bar])),
+         ?_assertEqual("foo bar baz", stringify([foo, bar, baz])),
+         ?_assertEqual("foo bar baz quux", stringify([foo, bar, baz, quux]))
+        ]},
+       {"tree'd",
+        [
+         ?_assertEqual("foo bar", stringify([foo, [bar]])),
+         ?_assertEqual("foo bar baz", stringify([foo, [bar, baz]])),
+         ?_assertEqual("foo bar baz quux", stringify([foo, [bar, [baz, quux]]]))
+        ]}
+      ]},
+     {"inputs: atoms and strings",
+      [
+       {"lists of",
+        [
+         ?_assertEqual("foo bar", stringify([foo, "bar"])),
+         ?_assertEqual("foo bar baz", stringify([foo, "bar", baz])),
+         ?_assertEqual("baz foo bar", stringify(["baz", foo, "bar"])),
+         ?_assertEqual("baz bux foo bar", stringify(["baz bux", foo, "bar"])),
+         ?_assertEqual("baz foo bux bar", stringify(["baz", foo, "bux bar"])),
+         ?_assertEqual("baz bux foo bux bar", stringify(["baz bux", foo, "bux bar"]))
+        ]},
+       {"trees of",
+        [
+         ?_assertEqual("foo bar", stringify([foo, "bar"])),
+         ?_assertEqual("foo bar baz", stringify([foo, ["bar", baz]])),
+         ?_assertEqual("baz foo bar", stringify([["baz", foo, "bar"]])),
+         ?_assertEqual("baz bux foo bar", stringify([["baz bux", foo], "bar"])),
+         ?_assertEqual("baz foo bux bar", stringify([["baz", foo], "bux bar"])),
+         ?_assertEqual("baz bux foo bux bar", stringify([["baz bux", [foo]], "bux bar"]))
+        ]}
+      ]},
+     {"inputs: atoms and binaries",
+      [
+       {"lists of",
+        [
+         ?_assertEqual("foo bar", stringify([foo, <<"bar">>])),
+         ?_assertEqual("foo bar baz", stringify([foo, <<"bar">>, baz])),
+         ?_assertEqual("baz foo bar", stringify([<<"baz">>, foo, <<"bar">>])),
+         ?_assertEqual("baz bux foo bar", stringify([<<"baz bux">>, foo, <<"bar">>])),
+         ?_assertEqual("baz foo bux bar", stringify([<<"baz">>, foo, <<"bux bar">>])),
+         ?_assertEqual("baz bux foo bux bar", stringify([<<"baz bux">>, foo, <<"bux bar">>]))
+        ]},
+       {"trees of",
+        [
+         ?_assertEqual("foo bar", stringify([foo, <<"bar">>])),
+         ?_assertEqual("foo bar baz", stringify([foo, [<<"bar">>, baz]])),
+         ?_assertEqual("baz foo bar", stringify([[<<"baz">>, foo, <<"bar">>]])),
+         ?_assertEqual("baz bux foo bar", stringify([[<<"baz bux">>, foo], <<"bar">>])),
+         ?_assertEqual("baz foo bux bar", stringify([[<<"baz">>, foo], <<"bux bar">>])),
+         ?_assertEqual("baz bux foo bux bar", stringify([[<<"baz bux">>, [foo]], <<"bux bar">>]))
+        ]}
+      ]}
+    ].
+
+-endif.
