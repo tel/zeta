@@ -12,7 +12,9 @@
 	 handle_info/2, code_change/3]).
 
 -record(st, {tcp :: inet:socket(),
-	     udp :: inet:socket()}).
+             udp :: inet:socket(),
+             host :: inet:ip_address() | inet:hostname(),
+             port :: integer()}).
 
 %% -------------
 %% Lifecycle API
@@ -34,7 +36,7 @@ init([Host, Port]) ->
     {ok, TCPSock} = gen_tcp:connect(Host, Port, 
 				    [binary, {active, false}],
 				    5000),
-    {ok, #st{udp = UDPSock, tcp = TCPSock}}.
+    {ok, #st{udp = UDPSock, tcp = TCPSock, host = Host, port = Port}}.
 
 terminate(_Reason, #st{udp = UDPSock, tcp = TCPSock}) ->
     case UDPSock of
@@ -43,7 +45,7 @@ terminate(_Reason, #st{udp = UDPSock, tcp = TCPSock}) ->
     end,
     case TCPSock of
 	undefined -> ok;
-	TSock -> gen_udp:close(TSock)
+	TSock -> gen_tcp:close(TSock)
     end.
     
 handle_call({events, Msg}, _From, St = #st{tcp = TCP}) ->
@@ -58,8 +60,8 @@ handle_call({events, Msg}, _From, St = #st{tcp = TCP}) ->
     end;
 handle_call(_Message, _From, State) -> {reply, ignored, State}.
 
-handle_cast({events, Msg}, St = #st{udp = UDP}) -> 
-    gen_udp:send(UDP, Msg),
+handle_cast({events, Msg}, St = #st{udp = UDP, host = Host, port = Port}) ->
+    gen_udp:send(UDP, Host, Port, Msg),
     {noreply, St}.
 
 handle_info(_Message, State) -> {ok, State}.
