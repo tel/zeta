@@ -153,9 +153,6 @@ stop(_State) ->
 %% Supervisor callbacks
 
 init(_Args) ->
-    _Backend = {zeta_client, 
-                {zeta_client, start_link, []},
-                permanent, brutal_kill, worker, [zeta_client]},
     Corral = {zeta_corral,
               {zeta_corral, start_link, []},
               permanent, 5000, supervisor, [zeta_corral]},
