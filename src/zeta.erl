@@ -7,6 +7,7 @@
 -export([ev/2, ev/3, ev/4, evh/2, evh/3, evh/4]).
 -export([sv/2, sv/3, sv/4, svh/2, svh/3, svh/4]).
 -export([cv/2, cv/3, cv/4, cvh/2, cvh/3, cvh/4]).
+-export([cv_batch/1, sv_batch/1]).
 
 -export([all_client_configs/0, client_config/1]).
 
@@ -88,12 +89,16 @@ sv(Loc, Metric) -> sv(Loc, Metric, undefined).
 sv(Loc, Metric, State) -> sv(Loc, Metric, State, []).
 sv(Loc, Metric, State, Opts) ->
     E = ev(Loc, Metric, State, Opts),
-    M = #zeta_msg{zevents = [E]},
+    sv_batch([E]).
+
+sv_batch(Es) ->
+    M = #zeta_msg{zevents = Es},
     Data = zeta_pb:encode(M),
     Length = byte_size(Data),
-    do([error_m || 
-	   Client <- zeta_corral:client(),
-	   gen_server:call(Client, {events, <<Length:32/integer-big, Data/binary>>})]).
+    do([error_m ||
+           Client <- zeta_corral:client(),
+           gen_server:call(
+             Client, {events, <<Length:32/integer-big, Data/binary>>})]).
 
 svh(Service, Metric) -> svh(Service, Metric, undefined).
 svh(Service, Metric, State) -> svh(Service, Metric, State, []).
@@ -103,16 +108,19 @@ cv(Loc, Metric) -> cv(Loc, Metric, undefined).
 cv(Loc, Metric, State) -> cv(Loc, Metric, State, []).
 cv(Loc, Metric, State, Opts) ->
     E = ev(Loc, Metric, State, Opts),
-    M = #zeta_msg{zevents = [E]},
+    cv_batch([E]).
+
+cv_batch(Es) ->
+    M = #zeta_msg{zevents = Es},
     Data = zeta_pb:encode(M),
     do([error_m || 
-	   Client <- zeta_corral:client(),
-	   gen_server:cast(Client, {events, Data})]).
+           Client <- zeta_corral:client(),
+           gen_server:cast(Client, {events, Data})]).
+
 
 cvh(Service, Metric) -> cvh(Service, Metric, undefined).
 cvh(Service, Metric, State) -> cvh(Service, Metric, State, []).
 cvh(Service, Metric, State, Opts) -> cv({node(), Service}, Metric, State, Opts).
-
 
 lookup(K, List) when is_atom(K) ->
     case lists:keyfind(K, 1, List) of
