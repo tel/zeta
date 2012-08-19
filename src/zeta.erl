@@ -1,18 +1,19 @@
 %% @doc Zeta: an Erlang client for Riemann
 
 -module(zeta).
--compile([{parse_transform, do}]).
 -author('Joseph Abrahamson <me@jspha.com>').
 
 -export([ev/2, ev/3, ev/4, evh/2, evh/3, evh/4]).
 -export([sv/2, sv/3, sv/4, svh/2, svh/3, svh/4]).
 -export([cv/2, cv/3, cv/4, cvh/2, cvh/3, cvh/4]).
-
--export([all_client_configs/0, client_config/1]).
+-export([sv_batch/1, cv_batch/1]).
 
 -behaviour(application).
 -define(APP, ?MODULE).
+-define(NS, zeta_ns).
 -export([start/0, start/2, stop/1]).
+
+-export_types([stringable/0]).
 
 -behaviour(supervisor).
 -define(SUP, zeta_sup).
@@ -23,44 +24,32 @@
 %% ----------
 %% Public API
 
--type atom_or_string() :: atom() | nonempty_string().
+-type stringable() :: atom() | binary() | string().
 
--type service() :: atom_or_string() | list(atom_or_string()).
--type loc_spec() :: atom_or_string() | {atom_or_string(), service()}.
--type event_opt() :: {t | time | desc | description | tag | tags | ttl, _}.
+-type service() :: stringable() | list(stringable()).
+-type loc_spec() :: stringable() | {stringable(), service()}.
+-type event_opt() :: {t | time | desc | description | tag | tags | ttl, any()}.
 
 -spec 
 %% @doc Builds an event, trying to be as "DWIM" as possible.
 ev(loc_spec() | service(), number()) -> zevent().
 ev({Host, Service}, Metric) when is_list(Host) ->
-    E = ev(Service, Metric),
-    E#zeta_event{host = Host};
+    #zeta_event{service = zeta_util:stringify(Service),
+                metric_f = Metric, 
+                host = Host};
 ev({Host, Service}, Metric) when is_atom(Host) ->
-    E = ev(Service, Metric),
-    E#zeta_event{host = atom_to_list(Host)};
-ev(Service, Metric) when is_number(Metric) ->
-    #zeta_event{service = stringify(Service), metric_f = Metric}.
-
-%% @doc Converts a list or tree of atoms/binaries/strings to a series
-%% of "words". See the tests at the end of this source file for more
-%% details.
-stringify(It) -> string:join(stringify_in(It), " ").
-
-%% @doc Takes in whatever `stringify/1' hands it and returns a list of
-%% string tokens (a list of lists).
-stringify_in(B) when is_binary(B) -> [binary_to_list(B)];
-stringify_in(A) when is_atom(A) -> [atom_to_list(A)];
-stringify_in(L) when is_list(L) ->
-    case io_lib:printable_unicode_list(L) of
-        true -> [L];
-        false -> lists:flatmap(fun stringify_in/1, L)
-    end.
+    #zeta_event{service = zeta_util:stringify(Service), 
+                metric_f = Metric, 
+                host = atom_to_list(Host)};
+ev(Service, Metric) ->
+    #zeta_event{service = zeta_util:stringify(Service),
+                metric_f = Metric}.
 
 ev(Loc, Metric, State) ->
     ev(Loc, Metric, State, []).
 
 -spec
-ev(loc_spec() | service(), number(), atom_or_string(), [event_opt()]) -> zevent().
+ev(loc_spec() | service(), number(), stringable(), [event_opt()]) -> zevent().
 ev(Loc, Metric, State, []) when is_atom(State) ->
     ev(Loc, Metric, atom_to_list(State), []);
 ev(Loc, Metric, State, []) when is_list(State) ->
@@ -68,19 +57,13 @@ ev(Loc, Metric, State, []) when is_list(State) ->
     E#zeta_event{state = State};
 ev(Loc, Metric, State, Opts) ->
     [Time, Description, Tags, TTL] = 
-	lists:map(fun (K) -> lookup(K, Opts) end, 
-		  [[t, time], [desc, description], [tag, tags], ttl]),
+        lists:map(fun (K) -> zeta_util:lookup_alts(K, Opts) end, 
+                  [[t, time], [desc, description], [tag, tags], [ttl]]),
     E = ev(Loc, Metric, State, []),
     E#zeta_event{time = Time, 
-		 description = Description, tags = process_tags(Tags, []),
-		 ttl = TTL}.
-
-process_tags(undefined, _) -> [];
-process_tags([], Acc) -> Acc;
-process_tags([Tag | Tags], Acc) when is_atom(Tag) ->
-    process_tags(Tags, [atom_to_list(Tag) | Acc]);
-process_tags([Tag | Tags], Acc) when is_list(Tag) ->
-    process_tags(Tags, [Tag | Acc]).
+                 description = Description, 
+                 tags = lists:map(fun zeta_util:ensure_string/1, Tags),
+                 ttl = TTL}.
 
 evh(Service, Metric) ->
     ev({node(), Service}, Metric).
@@ -96,12 +79,18 @@ sv(Loc, Metric) -> sv(Loc, Metric, undefined).
 sv(Loc, Metric, State) -> sv(Loc, Metric, State, []).
 sv(Loc, Metric, State, Opts) ->
     E = ev(Loc, Metric, State, Opts),
-    M = #zeta_msg{zevents = [E]},
+    sv_batch([E]).
+
+sv_batch(Es) ->
+    M = #zeta_msg{zevents = Es},
     Data = zeta_pb:encode(M),
     Length = byte_size(Data),
-    do([error_m || 
-	   Client <- zeta_corral:client(),
-	   gen_server:call(Client, {events, <<Length:32/integer-big, Data/binary>>})]).
+    %% The `try' allows for silent failure if we want to instrument
+    %% and sometimes not run a collection server.
+    try gen_server:call({via, ?NS, default}, 
+                        {events, <<Length:32/integer-big, Data/binary>>})
+    catch exit:{noproc, _} -> {error, no_client}
+    end.
 
 svh(Service, Metric) -> svh(Service, Metric, undefined).
 svh(Service, Metric, State) -> svh(Service, Metric, State, []).
@@ -111,28 +100,23 @@ cv(Loc, Metric) -> cv(Loc, Metric, undefined).
 cv(Loc, Metric, State) -> cv(Loc, Metric, State, []).
 cv(Loc, Metric, State, Opts) ->
     E = ev(Loc, Metric, State, Opts),
-    M = #zeta_msg{zevents = [E]},
+    cv_batch([E]).
+
+cv_batch(Es) ->
+    M = #zeta_msg{zevents = Es},
     Data = zeta_pb:encode(M),
-    do([error_m || 
-	   Client <- zeta_corral:client(),
-	   gen_server:cast(Client, {events, Data})]).
+    %% The `try' allows for silent failure if we want to instrument
+    %% and sometimes not run a collection server.
+    try gen_server:call({via, ?NS, default}, 
+                        {events, Data})
+    catch exit:{noproc, _} -> {error, no_client}
+    end.
 
 cvh(Service, Metric) -> cvh(Service, Metric, undefined).
 cvh(Service, Metric, State) -> cvh(Service, Metric, State, []).
 cvh(Service, Metric, State, Opts) -> cv({node(), Service}, Metric, State, Opts).
 
 
-lookup(K, List) when is_atom(K) ->
-    case lists:keyfind(K, 1, List) of
-	{K, V} -> V;
-	false -> undefined
-    end;
-lookup([], _) -> undefined;
-lookup([K | Ks], List) ->
-    case lookup(K, List) of
-	undefined -> lookup(Ks, List);
-	V -> V
-    end.
 
 %% ---------------------
 %% Application callbacks
@@ -153,32 +137,17 @@ stop(_State) ->
 %% Supervisor callbacks
 
 init(_Args) ->
+    NS = {zeta_ns,
+          {zeta_ns, start_link, []},
+          permanent, brutal_kill, worker, [zeta_ns]},
     Corral = {zeta_corral,
               {zeta_corral, start_link, []},
               permanent, 5000, supervisor, [zeta_corral]},
-    {ok, {{one_for_one, 5, 10}, [Corral]}}.
+    {ok, {{rest_for_one, 5, 10}, [NS, Corral]}}.
 
 
 %% ---------
 %% Utilities
-
-all_client_configs() ->
-    case application:get_env(?APP, clients) of
-	{ok, Confs} -> {ok, Confs};
-	_ -> {ok, []}
-    end.
-
--spec 
-client_config(Client :: atom()) -> 
-    maybe:t({inet:address(), inet:portnumber(), Restart :: term()}).
-client_config(Client) ->
-    case all_client_configs() of
-	{ok, Confs} ->
-	    case lists:keyfind(Client, 1, Confs) of
-		{Client, Conf} -> maybe_m:just(Conf);
-		_Else -> maybe_m:nothing()
-	    end
-    end.
 
 estart(App) ->
     case application:start(App) of
@@ -186,79 +155,3 @@ estart(App) ->
 	ok -> ok;
 	Else -> Else
     end.
-
-
-%% -----------------------
-%% Internal function tests
-
--ifdef(TEST).
-
--include_lib("eunit/include/eunit.hrl").
-
-stringify_test_() ->
-    [
-     {"inputs: just atoms", 
-      [
-       {"single",
-        [
-         ?_assertEqual("foo", stringify(foo)),
-         ?_assertEqual("foo", stringify([foo]))
-        ]},
-       {"multiple",
-        [
-         ?_assertEqual("foo bar", stringify([foo, bar])),
-         ?_assertEqual("foo bar baz", stringify([foo, bar, baz])),
-         ?_assertEqual("foo bar baz quux", stringify([foo, bar, baz, quux]))
-        ]},
-       {"tree'd",
-        [
-         ?_assertEqual("foo bar", stringify([foo, [bar]])),
-         ?_assertEqual("foo bar baz", stringify([foo, [bar, baz]])),
-         ?_assertEqual("foo bar baz quux", stringify([foo, [bar, [baz, quux]]]))
-        ]}
-      ]},
-     {"inputs: atoms and strings",
-      [
-       {"lists of",
-        [
-         ?_assertEqual("foo bar", stringify([foo, "bar"])),
-         ?_assertEqual("foo bar baz", stringify([foo, "bar", baz])),
-         ?_assertEqual("baz foo bar", stringify(["baz", foo, "bar"])),
-         ?_assertEqual("baz bux foo bar", stringify(["baz bux", foo, "bar"])),
-         ?_assertEqual("baz foo bux bar", stringify(["baz", foo, "bux bar"])),
-         ?_assertEqual("baz bux foo bux bar", stringify(["baz bux", foo, "bux bar"]))
-        ]},
-       {"trees of",
-        [
-         ?_assertEqual("foo bar", stringify([foo, "bar"])),
-         ?_assertEqual("foo bar baz", stringify([foo, ["bar", baz]])),
-         ?_assertEqual("baz foo bar", stringify([["baz", foo, "bar"]])),
-         ?_assertEqual("baz bux foo bar", stringify([["baz bux", foo], "bar"])),
-         ?_assertEqual("baz foo bux bar", stringify([["baz", foo], "bux bar"])),
-         ?_assertEqual("baz bux foo bux bar", stringify([["baz bux", [foo]], "bux bar"]))
-        ]}
-      ]},
-     {"inputs: atoms and binaries",
-      [
-       {"lists of",
-        [
-         ?_assertEqual("foo bar", stringify([foo, <<"bar">>])),
-         ?_assertEqual("foo bar baz", stringify([foo, <<"bar">>, baz])),
-         ?_assertEqual("baz foo bar", stringify([<<"baz">>, foo, <<"bar">>])),
-         ?_assertEqual("baz bux foo bar", stringify([<<"baz bux">>, foo, <<"bar">>])),
-         ?_assertEqual("baz foo bux bar", stringify([<<"baz">>, foo, <<"bux bar">>])),
-         ?_assertEqual("baz bux foo bux bar", stringify([<<"baz bux">>, foo, <<"bux bar">>]))
-        ]},
-       {"trees of",
-        [
-         ?_assertEqual("foo bar", stringify([foo, <<"bar">>])),
-         ?_assertEqual("foo bar baz", stringify([foo, [<<"bar">>, baz]])),
-         ?_assertEqual("baz foo bar", stringify([[<<"baz">>, foo, <<"bar">>]])),
-         ?_assertEqual("baz bux foo bar", stringify([[<<"baz bux">>, foo], <<"bar">>])),
-         ?_assertEqual("baz foo bux bar", stringify([[<<"baz">>, foo], <<"bux bar">>])),
-         ?_assertEqual("baz bux foo bux bar", stringify([[<<"baz bux">>, [foo]], <<"bux bar">>]))
-        ]}
-      ]}
-    ].
-
--endif.

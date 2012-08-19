@@ -10,10 +10,9 @@
 %% of creating new on the fly.
 
 -module(zeta_corral).
--compile([{parse_transform, do}]).
 -author('Joseph Abrahamson <me@jspha.com>').
 
--export([client/0, client/1]).
+-export([start_client/3, start_clients/0]).
 
 -export([start_link/0]).
 
@@ -26,36 +25,31 @@
 %% Public API
 %% ----------
 
--spec
-%% @equiv client(default).
-client() -> error_m:t(pid()).
-client() -> client(default).
-
--spec
-client(Name :: atom()) -> error_m:t(pid()).
-client(Name) ->
-    case
-	do([error_m || 
-	       {Host, Port, _} <- maybe_m:justok(zeta:client_config(Name)),
-	       start_client(Name, Host, Port)]) 
-	of
-	{error, {already_started, Pid}} -> {ok, Pid};
-	{ok, Pid} -> {ok, Pid};
-	{error, Reason} -> {error, Reason}
-    end.
-
 start_client(Name, Host, Port) ->
-      supervisor:start_child(
-	?SUP,
-	{Name, {zeta_client, start_link, [Host, Port]},
-	 temporary, brutal_kill, worker, [zeta_client]}).
+    supervisor:start_child(
+      ?SUP,
+      {Name, {zeta_client, start_link, [Name, Host, Port]},
+       temporary, brutal_kill, worker, [zeta_client]}).
+
+start_clients() ->
+    ClientConfigs =
+        case application:get_env(zeta, clients) of
+            {ok, Confs} -> Confs;
+            _Else -> []
+        end,
+    lists:foreach(
+      fun ({Name, {Host, Port, _}}) ->
+              {ok, _} = start_client(Name, Host, Port)
+      end, ClientConfigs).
 
 
 %% Lifecycle API
 %% -------------
 
 start_link() ->
-    supervisor:start_link({local, ?SUP}, ?MODULE, []).
+    Ret = supervisor:start_link({local, ?SUP}, ?MODULE, []),
+    start_clients(),
+    Ret.
 
 %% Supervisor API
 %% --------------

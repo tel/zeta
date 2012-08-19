@@ -56,7 +56,7 @@ encode(
       [BOk, BError, BStates, BQuery, BEvents]);
 encode(
   #zeta_state{time = Time, state = State, service = Service, host = Host,
-	      description = Desc, once = Once, tags = Tags, ttl = TTL, metric_f = MetricF}
+              description = Desc, once = Once, tags = Tags, ttl = TTL, metric_f = MetricF}
  ) ->
     erlang:iolist_to_binary(
       [
@@ -74,7 +74,7 @@ encode(
       ]);
 encode(
   #zeta_event{time = Time, state = State, service = Service, host = Host, 
-	      description = Desc, tags = Tags, ttl = TTL, metric_f = MetricF}
+              description = Desc, tags = Tags, ttl = TTL, metric_f = MetricF}
  ) ->
     erlang:iolist_to_binary(
       [

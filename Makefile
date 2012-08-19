@@ -29,7 +29,7 @@ fast:
 	@$(REBAR) skip_deps=true compile
 
 run:
-	@$(ERL) -pa $(PWD)/../*/ebin
+	@$(ERL) -pa ebin deps/*/ebin -s zeta
 
 dialyzer: all
 	dialyzer \
