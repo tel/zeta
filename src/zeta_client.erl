@@ -33,10 +33,15 @@ init([Host, Port]) ->
     %% Open UDP on a random port
     {ok, UDPSock} = gen_udp:open(0, [binary, {active,false}]),
     %% Try to make a TCP connection
-    {ok, TCPSock} = gen_tcp:connect(Host, Port, 
-				    [binary, {active, false}],
-				    5000),
-    {ok, #st{udp = UDPSock, tcp = TCPSock, host = Host, port = Port}}.
+    case gen_tcp:connect(Host, Port,
+                         [binary, {active, false}],
+                         5000) of
+        {ok, TCPSock} ->
+            {ok, #st{udp = UDPSock, tcp = TCPSock, host = Host, port = Port}};
+        {error, econnrefused} ->
+            error_logger:info_msg("zeta_client connection refused"),
+            {stop, {shutdown, econnrefused}}
+    end.
 
 terminate(_Reason, #st{udp = UDPSock, tcp = TCPSock}) ->
     case UDPSock of
