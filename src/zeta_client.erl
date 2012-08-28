@@ -49,14 +49,21 @@ terminate(_Reason, #st{udp = UDPSock, tcp = TCPSock}) ->
     end.
     
 handle_call({events, Msg}, _From, St = #st{tcp = TCP}) ->
-    ok = gen_tcp:send(TCP, Msg),
-    case gen_tcp:recv(TCP, 0, 2000) of
-	{ok, Resp} -> 
-	    case zeta_pb:pop(Resp) of
-		{#zeta_msg{ok = true}, _} -> {reply, ok, St};
-		{#zeta_msg{error = Error}, _} -> {error, {riemann, Error}};
-		{none, _} -> {error, noparse}
-	    end
+    case gen_tcp:send(TCP, Msg) of
+        ok ->
+            case gen_tcp:recv(TCP, 0, 2000) of
+                {ok, Resp} ->
+                    case zeta_pb:pop(Resp) of
+                        {#zeta_msg{ok = true}, _} ->
+                            {reply, ok, St};
+                        {#zeta_msg{error = Error}, _} ->
+                            {error, {riemann, Error}};
+                        {none, _} -> {error, noparse}
+                    end
+            end;
+        {error, closed} ->
+            error_logger:info_msg("zeta_client disconnected"),
+            {stop, {shutdown, connection_closed}, St}
     end;
 handle_call(_Message, _From, State) -> {reply, ignored, State}.
 
